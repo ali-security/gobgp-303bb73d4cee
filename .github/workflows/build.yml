@@ -1,0 +1,75 @@
+name: build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    name: pack (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build the module packer
+        shell: bash
+        run: |
+          mkdir -p packer dist
+          cd packer
+          cat > main.go <<'EOF'
+          package main
+
+          import (
+              "log"
+              "os"
+
+              "golang.org/x/mod/module"
+              "golang.org/x/mod/zip"
+          )
+
+          func main() {
+              if len(os.Args) != 5 {
+                  log.Fatal("usage: packer <module-path> <version> <source-dir> <output-zip>")
+              }
+              m := module.Version{Path: os.Args[1], Version: os.Args[2]}
+              f, err := os.Create(os.Args[4])
+              if err != nil {
+                  log.Fatal(err)
+              }
+              defer f.Close()
+              if err := zip.CreateFromDir(f, m, os.Args[3]); err != nil {
+                  log.Fatal(err)
+              }
+              log.Printf("created module zip: %s", os.Args[4])
+          }
+          EOF
+          go mod init seal.local/packer
+          go get golang.org/x/mod@v0.17.0
+
+      - name: Pack the module zip
+        shell: bash
+        run: |
+          cd packer
+          go run . github.com/osrg/gobgp 'v2.0.0+incompatible' ../src '../dist/v2.0.0+incompatible.zip'
+          ls -l ../dist
+
+      - name: Upload the module zip
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: module-zip
+          path: dist/v2.0.0+incompatible.zip
+          if-no-files-found: error

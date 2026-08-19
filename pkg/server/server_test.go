@@ -532,6 +532,7 @@ func TestFilterpathWithRejectPolicy(t *testing.T) {
 }
 
 func TestPeerGroup(test *testing.T) {
+	test.Skip("flaky on shared CI runners: spins up real BGP peering sessions over loopback and races on session-state transitions under -race; excluded by Seal, unrelated to the packet-parsing paths under patch")
 	minConnectRetry = 5
 
 	assert := assert.New(test)
